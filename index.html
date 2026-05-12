@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Invaders</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 800;
+        canvas.height = 600;
+
+        class Player {
+            constructor() {
+                this.width = 50;
+                this.height = 20;
+                this.x = canvas.width / 2 - this.width / 2;
+                this.y = canvas.height - this.height - 10;
+                this.speed = 5;
+            }
+
+            draw() {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            move(direction) {
+                if (direction === 'left' && this.x > 0) {
+                    this.x -= this.speed;
+                } else if (direction === 'right' && this.x + this.width < canvas.width) {
+                    this.x += this.speed;
+                }
+            }
+        }
+
+        class Invader {
+            constructor(x, y) {
+                this.width = 30;
+                this.height = 20;
+                this.x = x;
+                this.y = y;
+            }
+
+            draw() {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        const player = new Player();
+        const invaders = [];
+
+        for (let i = 0; i < 5; i++) {
+            for (let j = 0; j < 10; j++) {
+                invaders.push(new Invader(50 + j * 40, 50 + i * 30));
+            }
+        }
+
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            player.draw();
+            invaders.forEach(invader => invader.draw());
+        }
+
+        function gameLoop() {
+            update();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                player.move('left');
+            } else if (e.key === 'ArrowRight') {
+                player.move('right');
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
