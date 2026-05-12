@@ -1,86 +1,434 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Space Invaders</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Galaxy Defender</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background: black;
+      overflow: hidden;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    #gameContainer {
+      position: relative;
+    }
+
+    canvas {
+      background: linear-gradient(to bottom, #050510, #0d1b2a);
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      font-size: 22px;
+      z-index: 10;
+      display: flex;
+      gap: 25px;
+      padding: 12px 20px;
+      border: 2px solid cyan;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.45);
+      box-shadow:
+        0 0 10px cyan,
+        0 0 20px cyan,
+        inset 0 0 10px cyan;
+      color: cyan;
+      text-shadow: 0 0 8px cyan;
+      backdrop-filter: blur(4px);
+    }
+
+    #gameOverScreen {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 15px;
+      text-align: center;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background: limegreen;
+      color: white;
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    button:hover {
+      background: green;
+    }
+
+    #leaderboard {
+      margin-top: 10px;
+      text-align: left;
+    }
+  </style>
 </head>
 <body>
+
+  <div id="gameContainer">
+    <div id="startScreen" style="position:absolute; inset:0; background:rgba(0,0,0,0.85); display:flex; justify-content:center; align-items:center; flex-direction:column; gap:20px; z-index:20; text-align:center;">
+      <h1 style="font-size:48px;">GALAXY DEFENDER</h1>
+      <p>Defeat the alien invasion and survive as long as possible.</p>
+      <button id="startButton">START GAME</button>
+    </div>
+
+    <div id="ui">
+      <div>Score: <span id="score">0</span></div>
+      <div>Lives: <span id="lives">3</span></div>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
 
-        canvas.width = 800;
-        canvas.height = 600;
+    <div id="gameOverScreen">
+      <h1>GAME OVER</h1>
+      <h2>Your Score: <span id="finalScore"></span></h2>
 
-        class Player {
-            constructor() {
-                this.width = 50;
-                this.height = 20;
-                this.x = canvas.width / 2 - this.width / 2;
-                this.y = canvas.height - this.height - 10;
-                this.speed = 5;
-            }
+      <input type="text" id="playerName" placeholder="Enter Name" maxlength="12" />
+      <button id="saveScoreBtn">Save Score</button>
+      <button onclick="restartGame()">Restart</button>
 
-            draw() {
-                ctx.fillStyle = 'white';
-                ctx.fillRect(this.x, this.y, this.width, this.height);
-            }
+      <div id="leaderboard">
+        <h3>Leaderboard</h3>
+        <ol id="leaderboardList"></ol>
+      </div>
+    </div>
+  </div>
 
-            move(direction) {
-                if (direction === 'left' && this.x > 0) {
-                    this.x -= this.speed;
-                } else if (direction === 'right' && this.x + this.width < canvas.width) {
-                    this.x += this.speed;
-                }
-            }
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    resizeCanvas();
+
+    window.addEventListener('resize', resizeCanvas);
+
+    const scoreElement = document.getElementById('score');
+    const livesElement = document.getElementById('lives');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const finalScore = document.getElementById('finalScore');
+    const startScreen = document.getElementById('startScreen');
+    const startButton = document.getElementById('startButton');
+    const leaderboardList = document.getElementById('leaderboardList');
+
+    let score = 0;
+    let lives = 3;
+    let gameRunning = false;
+    let shootCooldown = 0;
+
+    // PLAYER
+    const player = {
+      width: 60,
+      height: 20,
+      x: canvas.width / 2 - 30,
+      y: canvas.height - 50,
+      speed: 6,
+      color: 'cyan'
+    };
+
+    // BULLETS
+    const bullets = [];
+
+    // ENEMIES
+    const enemies = [];
+    const enemyRows = 4;
+    const enemyCols = 8;
+    const enemyWidth = 50;
+    const enemyHeight = 30;
+    let enemyDirection = 1;
+
+    // KEYS
+    const keys = {
+      left: false,
+      right: false,
+      space: false
+    };
+
+    // CREATE ENEMIES
+    function createEnemies() {
+      enemies.length = 0;
+
+      for (let row = 0; row < enemyRows; row++) {
+        for (let col = 0; col < enemyCols; col++) {
+          enemies.push({
+            x: 80 + col * 80,
+            y: 60 + row * 60,
+            width: enemyWidth,
+            height: enemyHeight,
+            alive: true
+          });
+        }
+      }
+    }
+
+    createEnemies();
+
+    // DRAW PLAYER
+    function drawPlayer() {
+      ctx.shadowColor = 'cyan';
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+      ctx.shadowBlur = 0;
+    }
+
+    // DRAW BULLETS
+    function drawBullets() {
+      ctx.shadowColor = 'yellow';
+      ctx.shadowBlur = 15;
+      ctx.fillStyle = 'yellow';
+
+      bullets.forEach((bullet, index) => {
+        bullet.y -= bullet.speed;
+
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+
+        if (bullet.y < 0) {
+          bullets.splice(index, 1);
         }
 
-        class Invader {
-            constructor(x, y) {
-                this.width = 30;
-                this.height = 20;
-                this.x = x;
-                this.y = y;
-            }
+        ctx.shadowBlur = 0;
+      });
+    }
 
-            draw() {
-                ctx.fillStyle = 'red';
-                ctx.fillRect(this.x, this.y, this.width, this.height);
-            }
+    // DRAW ENEMIES
+    function drawEnemies() {
+      let hitEdge = false;
+
+      enemies.forEach(enemy => {
+        if (!enemy.alive) return;
+
+        enemy.x += enemyDirection;
+
+        if (enemy.x + enemy.width > canvas.width || enemy.x < 0) {
+          hitEdge = true;
         }
 
-        const player = new Player();
-        const invaders = [];
+        ctx.shadowColor = 'red';
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = 'red';
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+        ctx.shadowBlur = 0;
+      });
 
-        for (let i = 0; i < 5; i++) {
-            for (let j = 0; j < 10; j++) {
-                invaders.push(new Invader(50 + j * 40, 50 + i * 30));
-            }
-        }
+      if (hitEdge) {
+        enemyDirection *= -1;
 
-        function update() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            player.draw();
-            invaders.forEach(invader => invader.draw());
-        }
+        enemies.forEach(enemy => {
+          enemy.y += 20;
 
-        function gameLoop() {
-            update();
-            requestAnimationFrame(gameLoop);
-        }
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') {
-                player.move('left');
-            } else if (e.key === 'ArrowRight') {
-                player.move('right');
-            }
+          if (enemy.y + enemy.height >= player.y) {
+            gameOver();
+          }
         });
+      }
+    }
 
-        gameLoop();
-    </script>
+    // PLAYER MOVEMENT
+    function movePlayer() {
+      if (keys.space && shootCooldown <= 0) {
+        shootBullet();
+        shootCooldown = 12;
+      }
+
+      if (shootCooldown > 0) {
+        shootCooldown--;
+      }
+
+      if (keys.left && player.x > 0) {
+        player.x -= player.speed;
+      }
+
+      if (keys.right && player.x + player.width < canvas.width) {
+        player.x += player.speed;
+      }
+    }
+
+    // SHOOT
+    function shootBullet() {
+      bullets.push({
+        x: player.x + player.width / 2 - 2,
+        y: player.y,
+        width: 4,
+        height: 12,
+        speed: 8
+      });
+    }
+
+    // COLLISIONS
+    function detectCollisions() {
+      bullets.forEach((bullet, bulletIndex) => {
+        enemies.forEach(enemy => {
+          if (
+            enemy.alive &&
+            bullet.x < enemy.x + enemy.width &&
+            bullet.x + bullet.width > enemy.x &&
+            bullet.y < enemy.y + enemy.height &&
+            bullet.y + bullet.height > enemy.y
+          ) {
+            enemy.alive = false;
+            bullets.splice(bulletIndex, 1);
+
+            score += 100;
+            scoreElement.textContent = score;
+          }
+        });
+      });
+
+      const allDead = enemies.every(enemy => !enemy.alive);
+
+      if (allDead) {
+        createEnemies();
+      }
+    }
+
+    // GAME LOOP
+    function gameLoop() {
+      if (!gameRunning) {
+        requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      movePlayer();
+      drawPlayer();
+      drawBullets();
+      drawEnemies();
+      detectCollisions();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // GAME OVER
+    function gameOver() {
+      gameRunning = false;
+
+      finalScore.textContent = score;
+      gameOverScreen.style.display = 'flex';
+
+      loadLeaderboard();
+    }
+
+    // RESTART
+    function restartGame() {
+      score = 0;
+      lives = 3;
+      gameRunning = true;
+
+      scoreElement.textContent = score;
+      livesElement.textContent = lives;
+
+      player.x = canvas.width / 2 - 30;
+
+      bullets.length = 0;
+
+      createEnemies();
+
+      gameOverScreen.style.display = 'none';
+
+      gameLoop();
+    }
+
+    // KEY EVENTS
+    document.addEventListener('keydown', e => {
+      if (e.code === 'ArrowLeft') {
+        keys.left = true;
+      }
+
+      if (e.code === 'ArrowRight') {
+        keys.right = true;
+      }
+
+      if (e.code === 'Space') {
+        keys.space = true;
+      }
+    });
+
+    document.addEventListener('keyup', e => {
+      if (e.code === 'ArrowLeft') {
+        keys.left = false;
+      }
+
+      if (e.code === 'ArrowRight') {
+        keys.right = false;
+      }
+
+      if (e.code === 'Space') {
+        keys.space = false;
+      }
+    });
+
+    // LEADERBOARD USING LOCAL STORAGE
+    function saveScore() {
+      const nameInput = document.getElementById('playerName');
+      const name = nameInput.value.trim() || 'Player';
+
+      const leaderboard = JSON.parse(localStorage.getItem('leaderboard')) || [];
+
+      leaderboard.push({
+        name,
+        score
+      });
+
+      leaderboard.sort((a, b) => b.score - a.score);
+
+      leaderboard.splice(10);
+
+      localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
+
+      loadLeaderboard();
+    }
+
+    function loadLeaderboard() {
+      leaderboardList.innerHTML = '';
+
+      const leaderboard = JSON.parse(localStorage.getItem('leaderboard')) || [];
+
+      leaderboard.forEach(entry => {
+        const li = document.createElement('li');
+        li.textContent = `${entry.name} - ${entry.score}`;
+        leaderboardList.appendChild(li);
+      });
+    }
+
+    document.getElementById('saveScoreBtn').addEventListener('click', saveScore);
+
+    // START GAME BUTTON
+    startButton.addEventListener('click', () => {
+      startScreen.style.display = 'none';
+      gameRunning = true;
+    });
+
+    gameLoop();
+  </script>
 </body>
 </html>
